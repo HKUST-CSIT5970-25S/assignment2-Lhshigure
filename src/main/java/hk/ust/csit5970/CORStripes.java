@@ -16,6 +16,10 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 
+import hk.ust.csit5970.CORStripes.CORStripesCombiner2;
+import hk.ust.csit5970.CORStripes.CORStripesMapper2;
+import hk.ust.csit5970.CORStripes.CORStripesReducer2;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -43,6 +47,16 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			while (doc_tokenizer.hasMoreTokens()) {
+				String word = doc_tokenizer.nextToken();
+                int count = word_set.containsKey(word) ? word_set.get(word) : 0;
+    			word_set.put(word, count + 1);
+			}
+
+			for (Map.Entry<String, Integer> entry : word_set.entrySet()) {
+				context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
+			}
+					
 		}
 	}
 
@@ -56,6 +70,12 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+            for (IntWritable val : values) {
+                sum += val.get();
+            }
+            context.write(key, new IntWritable(sum));
+			
 		}
 	}
 
@@ -75,6 +95,28 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+	
+			List<String> words = new ArrayList<String>(sorted_word_set);
+			int word_count = words.size();
+			
+			for (int i = 0; i < word_count; i++) {
+				String word = words.get(i);
+				MapWritable stripe = new MapWritable();
+	
+				for (int j = 0; j < word_count; j++) {
+					if (i != j) {
+						String neighbor = words.get(j);
+						IntWritable count = (IntWritable) stripe.get(new Text(neighbor));
+						if (count == null) {
+							count = new IntWritable(0);
+						}
+						stripe.put(new Text(neighbor), new IntWritable(count.get() + 1));
+					}
+				}
+
+				context.write(new Text(word), stripe);
+			}
+			
 		}
 	}
 
@@ -89,6 +131,19 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			MapWritable combinedStripe = new MapWritable();
+			
+			 for (MapWritable value : values) {
+				for (Writable neighbor : value.keySet()) {
+					IntWritable fromValue = (IntWritable) value.get(neighbor);
+					IntWritable existingValue = (IntWritable) combinedStripe.get(neighbor);
+					if (existingValue == null) {
+						existingValue = new IntWritable(0);
+					}
+					combinedStripe.put(neighbor, new IntWritable(existingValue.get() + fromValue.get()));
+				}
+			}
+			context.write(key, combinedStripe);
 		}
 	}
 
@@ -142,6 +197,30 @@ public class CORStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			MapWritable combinedStripe = new MapWritable();
+
+			for (MapWritable value : values) {
+				for (Writable neighbor : value.keySet()) {
+					IntWritable count = (IntWritable) value.get(neighbor);
+					IntWritable existingCount = (IntWritable) combinedStripe.get(neighbor);
+					if (existingCount == null) {
+						existingCount = new IntWritable(0);
+					}
+					combinedStripe.put(neighbor, new IntWritable(existingCount.get() + count.get()));
+				}
+			}
+			
+			Integer totalFrequency = word_total_map.get(key.toString());
+			if (totalFrequency == null) {
+				totalFrequency = 1;
+			}
+			
+			for (Writable neighbor : combinedStripe.keySet()) {
+				int coOccurrence = ((IntWritable) combinedStripe.get(neighbor)).get();
+				double probability = (double) coOccurrence / totalFrequency;
+				context.write(new PairOfStrings(key.toString(), neighbor.toString()), new DoubleWritable(probability));
+			}
+			
 		}
 	}
 

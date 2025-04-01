@@ -2,7 +2,9 @@ package hk.ust.csit5970;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -19,6 +21,7 @@ import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.TestMiniMRClientCluster.MyReducer;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Reducer;
@@ -54,6 +57,20 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			
+			 if (words.length > 1) {
+					for (int i = 0; i < words.length - 1; ++i) {
+					//create bigram
+					KEY.set(words[i]);
+					STRIPE.increment(words[i+1]);
+					context.write(KEY, STRIPE);
+					//clear stripe
+					STRIPE.clear();
+					STRIPE.increment("");
+					context.write(KEY, STRIPE);
+					STRIPE.clear();
+				}
+			}
 		}
 	}
 
@@ -67,7 +84,7 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 		private final static HashMapStringIntWritable SUM_STRIPES = new HashMapStringIntWritable();
 		private final static PairOfStrings BIGRAM = new PairOfStrings();
 		private final static FloatWritable FREQ = new FloatWritable();
-
+		private static int sum = 0;
 		@Override
 		public void reduce(Text key,
 				Iterable<HashMapStringIntWritable> stripes, Context context)
@@ -75,6 +92,34 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			HashMapStringIntWritable sumStripes = new HashMapStringIntWritable();
+			PairOfStrings bigram = new PairOfStrings();
+			FloatWritable freq = new FloatWritable();
+			int count = 0;
+
+			// all stripes
+			for (HashMapStringIntWritable stripe : stripes) {
+				sumStripes.plus(stripe);
+			}
+
+			// total counts
+			if (sumStripes.containsKey("")) {
+				count = sumStripes.get("");
+			}
+
+			//relative frequency
+			for (String k : sumStripes.keySet()) {
+				int sum = sumStripes.get(k);
+				if (k.equals("")) {
+					freq.set(sum); 
+				} else {
+					freq.set(sum / (float) count); 
+				}
+				bigram.set(key.toString(), k);
+				context.write(bigram, freq);
+			}
+
+			sumStripes.clear();
 		}
 	}
 
@@ -94,6 +139,12 @@ public class BigramFrequencyStripes extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			for (HashMapStringIntWritable stripe : stripes) {
+				SUM_STRIPES.plus(stripe); 
+			}
+		
+			context.write(key, SUM_STRIPES); 
+			SUM_STRIPES.clear(); 
 		}
 	}
 

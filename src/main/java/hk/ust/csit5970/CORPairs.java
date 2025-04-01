@@ -5,10 +5,6 @@ import org.apache.commons.cli.Options;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.*;
-import org.apache.hadoop.io.FloatWritable;
-import org.apache.hadoop.io.IntWritable;
-import org.apache.hadoop.io.LongWritable;
-import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Partitioner;
@@ -19,8 +15,9 @@ import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.log4j.Logger;
 
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
+import hk.ust.csit5970.CORPairs.CORPairsMapper2;
+import hk.ust.csit5970.CORPairs.CORPairsReducer2;
+
 import org.apache.hadoop.io.*;
 
 
@@ -29,8 +26,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URI;
 import java.util.*;
-import java.util.Arrays;
-import java.util.HashMap;
 
 /**
  * Compute the bigram count using "pairs" approach
@@ -53,6 +48,16 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			
+			while (doc_tokenizer.hasMoreTokens()) {
+				String word = doc_tokenizer.nextToken();
+				int count = word_set.containsKey(word) ? word_set.get(word) : 0;
+    			word_set.put(word, count + 1);
+			}
+
+			for (Map.Entry<String, Integer> entry : word_set.entrySet()) {
+				context.write(new Text(entry.getKey()), new IntWritable(entry.getValue()));
+			}
 		}
 	}
 
@@ -66,6 +71,11 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for (IntWritable val : values) {
+				sum += val.get();
+			}
+			context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -81,6 +91,19 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			List<String> words = new ArrayList<String>();
+			while (doc_tokenizer.hasMoreTokens()) {
+				words.add(doc_tokenizer.nextToken());
+			}
+	
+			// 生成 Bigram 及其频率
+			for (int i = 0; i < words.size() - 1; i++) {
+				String word1 = words.get(i);
+				String word2 = words.get(i + 1);
+				PairOfStrings pair = new PairOfStrings(word1, word2);
+				context.write(pair, new IntWritable(1));
+			}
+
 		}
 	}
 
@@ -93,6 +116,11 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for (IntWritable val : values) {
+				sum += val.get();
+			}
+			context.write(key, new IntWritable(sum));
 		}
 	}
 
@@ -145,6 +173,17 @@ public class CORPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int coOccurrence = 0;
+			for (IntWritable val : values) {
+				coOccurrence += val.get();
+			}
+	
+			String leftWord = key.getLeftElement();
+			int freqA = word_total_map.containsKey(leftWord) ? word_total_map.get(leftWord) : 1;
+
+	
+			double relatedness = (double) coOccurrence / freqA;
+			context.write(key, new DoubleWritable(relatedness));
 		}
 	}
 

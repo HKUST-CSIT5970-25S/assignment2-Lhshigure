@@ -2,6 +2,7 @@ package hk.ust.csit5970;
 
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.HashMap;
 
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -18,6 +19,7 @@ import org.apache.hadoop.io.FloatWritable;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.LongWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapred.TestMiniMRClientCluster.MyReducer;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.Partitioner;
@@ -53,6 +55,14 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			for (int i = 0; i < words.length - 1; ++i) {
+				//create a bigram
+				BIGRAM.set(words[i],words[i+1]);
+				context.write(BIGRAM, ONE);
+				//counts first words
+				context.write(new PairOfStrings(words[i], ""), new IntWritable(1));
+			}
+		
 		}
 	}
 
@@ -64,6 +74,7 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 
 		// Reuse objects.
 		private final static FloatWritable VALUE = new FloatWritable();
+		private static int count = 0;
 
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
@@ -71,19 +82,39 @@ public class BigramFrequencyPairs extends Configured implements Tool {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+			int sum = 0;
+			for (IntWritable value : values) {
+				sum += value.get();
+			}
+			// count first words
+			if(key.getRightElement().toString().equals("")){
+				count = sum;
+		    	VALUE.set(sum);
+		    }
+			else {
+				//relative frequency
+		    	VALUE.set(sum /(float) count);
+		    }
+			context.write(key, VALUE);
 		}
 	}
 	
 	private static class MyCombiner extends
 			Reducer<PairOfStrings, IntWritable, PairOfStrings, IntWritable> {
 		private static final IntWritable SUM = new IntWritable();
-
 		@Override
 		public void reduce(PairOfStrings key, Iterable<IntWritable> values,
 				Context context) throws IOException, InterruptedException {
 			/*
 			 * TODO: Your implementation goes here.
 			 */
+
+			int total = 0;
+			for (IntWritable value : values) {
+				total += value.get(); 
+			}
+			SUM.set(total);
+			context.write(key, SUM); 
 		}
 	}
 
